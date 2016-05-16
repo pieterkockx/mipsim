@@ -1,3 +1,2 @@
-# mipsim
-mips emulator
-interpreter
+# mipsim / mipsimpreter
+mips emulator / interpreter
