@@ -1,2 +1,2 @@
 # mipsim / mipsimpreter
-mips emulator / interpreter
+simple command-line mips emulator / interpreter written in standard c
