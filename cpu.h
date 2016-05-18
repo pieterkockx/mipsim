@@ -1,3 +1,4 @@
+/* Written by Pieter Kockx */
 int32_t R[32];
 int32_t PC;
 int32_t LO;

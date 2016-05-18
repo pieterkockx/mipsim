@@ -1,3 +1,4 @@
+/* Written by Pieter Kockx */
 #include <stdlib.h>
 #include "mem.h"
 #include "cpu.h"
