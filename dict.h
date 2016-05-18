@@ -1,3 +1,4 @@
+/* Written by Pieter Kockx */
 #ifdef _ENCODING
 #define MAP(a, b) {a, #b,
 #define _(a, b, c) {a, b, c}},
@@ -76,14 +77,14 @@ static void xor(void);
 
 enum operand_alias { NIL, RS, RT, RD, IMM=16, SHAMT=5, TARGET=26 };
 
-/* code smells...
- *	1) macro black-magic, but no azkaban
+/* Questionable:
+ *	1) macro black-magic?
  *	2) static definition in a header?!
  *	3) storage-allocated in a header
  *	4) hard-coded external data
- * ...not so hard
- *	1) text-editor copy/paste on the other hand, is a dementor's kiss
- *	2) & 3) structure polymorphic and read-only
+ * Answerable:
+ *	1) alternatives, afaik, involve code/data-duplication
+ *	2) & 3) structure 'polymorphic' and read-only
  *	4) data is not magic but frames the whole program */
 
 #define DICT_OPC 19

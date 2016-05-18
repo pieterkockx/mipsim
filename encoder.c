@@ -1,5 +1,7 @@
+/* Written by Pieter Kockx */
 #include <string.h>
 #include <stdlib.h>
+
 #include "mem.h"
 #include "parser.h"
 
@@ -7,13 +9,13 @@
  #include "dict.h"
 #undef _ENCODING
 
-static struct dangling {
-	int *addr;
-	int instc;
+static struct labels_two {
+	int *def;
+	int ref;
 	union inst *I;
-	struct dangling *next;
-	struct dangling *prev;
-} dangling0 = {0};
+	struct labels_two *next;
+	struct labels_two *prev;
+} label0 = {0};
 
 static struct opcDict lookup_opc(const char *name)
 {
@@ -37,15 +39,15 @@ static struct functDict lookup_funct(const char *name)
 	return nomatch;
 }
 
-char is_mnem(const char *name)
+bool is_mnem(const char *name)
 {
 	return (lookup_opc(name).mnem) || (lookup_funct(name).mnem);
 }
 
-static char encode_opc(union inst *, struct extr, uint32_t, int []);
-static char encode_funct(union inst *, struct extr, uint32_t, int []);
+static bool encode_opc(union inst *, struct extr, uint32_t, int []);
+static bool encode_funct(union inst *, struct extr, uint32_t, int []);
 
-char encode(union inst *I, struct extr X)
+bool encode(union inst *I, struct extr X)
 {
 	struct opcDict oDict;
 	struct functDict fDict;
@@ -56,25 +58,25 @@ char encode(union inst *I, struct extr X)
 		return encode_opc(I, X, oDict.opc, oDict.args);
 	else if (fDict.mnem && *fDict.mnem)
 		return encode_funct(I, X, fDict.funct, fDict.args);
-	return 0;
+	return false;
 }
 
-static char encode_regs_in_imm(union inst *, int [], int []);
-static char add_dangling_label(int *, union inst *, int);
+static bool encode_regs_in_imm(union inst *, int [], int []);
+static bool add_forward_ref(int *, union inst *, int);
 
-static char encode_opc(union inst *I, struct extr X, uint32_t opc, int args[])
+static bool encode_opc(union inst *I, struct extr X, uint32_t opc, int args[])
 {
-	char errc = 0;
+	bool success = false;
 	if ((opc >> 1) == 0x01) {
 		I->jmp.op = opc;
 		if (X.addr && *X.addr >= 0) {
 			I->jmp.target = *X.addr;
-			errc = 1;
+			success = true;
 		} else if (X.addr && *X.addr < 0) {
-			errc = add_dangling_label(X.addr, I, -1);
+			success = add_forward_ref(X.addr, I, -1);
 		} else {
 			I->jmp.target = X.val;
-			errc = 1;
+			success = true;
 		}
 	} else if ((opc >> 4) == 0x01) {
 		return 0;
@@ -83,11 +85,11 @@ static char encode_opc(union inst *I, struct extr X, uint32_t opc, int args[])
 			int16_t offs = *X.addr - InstC - 1;
 			I->imm.op = opc;
 			I->imm.imm = offs;
-			errc = encode_regs_in_imm(I, X.reg, args);
+			success = encode_regs_in_imm(I, X.reg, args);
 		} else if (X.addr && *X.addr < 0) {
 			I->imm.op = opc;
-			errc = encode_regs_in_imm(I, X.reg, args)
-			 && add_dangling_label(X.addr, I, InstC + 1);
+			success = encode_regs_in_imm(I, X.reg, args)
+			 && add_forward_ref(X.addr, I, InstC + 1);
 		}
 	} else if (opc < 0x40) {
 		if (X.addr && *X.addr >= 0) {
@@ -97,24 +99,24 @@ static char encode_opc(union inst *I, struct extr X, uint32_t opc, int args[])
 				I->imm.imm = (addr >> 14);
 			else
 				I->imm.imm = (addr << 2);
-			errc = encode_regs_in_imm(I, X.reg, args);
+			success = encode_regs_in_imm(I, X.reg, args);
 		} else if (X.addr && *X.addr < 0) {
 			I->imm.op = opc;
-			errc = encode_regs_in_imm(I, X.reg, args)
-			 && add_dangling_label(X.addr, I, -1);
+			success = encode_regs_in_imm(I, X.reg, args)
+			 && add_forward_ref(X.addr, I, -1);
 		} else {
 			int16_t val = X.val;
 			I->imm.op = opc;
 			I->imm.imm = val;
-			errc = encode_regs_in_imm(I, X.reg, args);
+			success = encode_regs_in_imm(I, X.reg, args);
 		}
 	}
-	return errc;
+	return success;
 }
 
-static char encode_reg(union inst *, int[], uint32_t, int []);
+static bool encode_reg(union inst *, int[], uint32_t, int []);
 
-static char encode_funct(union inst *I, struct extr X, uint32_t funct, int args[])
+static bool encode_funct(union inst *I, struct extr X, uint32_t funct, int args[])
 {
 	I->reg.op = 0x0;
 	I->reg.funct = funct;
@@ -122,7 +124,7 @@ static char encode_funct(union inst *I, struct extr X, uint32_t funct, int args[
 
 }
 
-static char encode_reg(union inst *I, int reg[], uint32_t val, int args[])
+static bool encode_reg(union inst *I, int reg[], uint32_t val, int args[])
 {
 	int i, j=0;
 	for (i=0; i < 3 && args[i] ;++i) {
@@ -132,36 +134,36 @@ static char encode_reg(union inst *I, int reg[], uint32_t val, int args[])
 				I->reg.rs = reg[j++];
 				continue;
 			} else
-				return 0;
+				return false;
 		case RT:
 			if (reg[j] >= 0) {
 				I->reg.rt = reg[j++];
 				continue;
 			 } else
-				return 0;
+				return false;
 		case RD:
 			if (reg[j] >= 0) {
 				I->reg.rd = reg[j++];
 				continue;
 			} else
-				return 0;
+				return false;
 		case SHAMT:
 			if (val < (1 << SHAMT)) {
 				I->reg.shamt = val;
 				continue;
 			} else
-				return 0;
+				return false;
 		case NIL:
 			if (reg[j] > 0)
-				return 0;
+				return false;
 			else
 				continue;
 		}
 	}
-	return 1;
+	return true;
 }
 
-static char encode_regs_in_imm(union inst *I, int reg[], int args[])
+static bool encode_regs_in_imm(union inst *I, int reg[], int args[])
 {
 	int i, j=0;
 	for (i=0; i < 3 && args[i] ;++i) {
@@ -171,65 +173,63 @@ static char encode_regs_in_imm(union inst *I, int reg[], int args[])
 				I->reg.rs = reg[j++];
 				continue;
 			} else
-				return 0;
+				return false;
 		case RT:
 			if (j < 3 && reg[j] >= 0) {
 				I->reg.rt = reg[j++];
 				continue;
 			} else
-				return 0;
+				return false;
 		case IMM:
 			continue;
 		case NIL:
 			if (j < 3 && reg[j] >= 0) {
-				return 0;
+				return false;
 			}
 		}
 	}
-	return 1;
+	return true;
 }
 
-static char add_dangling_label(int *addr, union inst *I, int instc)
+static bool add_forward_ref(int *def, union inst *I, int ref)
 {
-	struct dangling *curr = &dangling0;
+	struct labels_two *curr = &label0;
 
 	while (curr->next) curr = curr->next;
-	curr->addr = addr;
-	curr->instc = instc;
+	curr->def = def;
+	curr->ref = ref;
 	curr->I = I;
-	if ((curr->next = malloc(sizeof(struct dangling)))) {
+	if ((curr->next = malloc(sizeof(struct labels_two)))) {
 		curr->next->next = NULL;
 		curr->next->prev = curr;
-		return 1;
+		return true;
 	} else
-		return 0;
+		return false;
 }
 
 bool link_labels(void)
 {
-	struct dangling *curr = &dangling0;
-
-	while (curr->next) {
-		if (*curr->addr == -1) {
+	struct labels_two *curr;
+	for (curr=&label0; curr->next; curr=curr->next) {
+		if (*curr->def == -1) {
 			return false;
-		} else if (*curr->addr > TEXT) {
-			int16_t addr = (*curr->addr);
-			curr->I->imm.imm = addr;
-		} else if (curr->instc >= 0) {
-			int16_t offs = *curr->addr - curr->instc;
+		} else if (*curr->def > TEXT) {
+			int16_t def = (*curr->def);
+			curr->I->imm.imm = def;
+		} else if (curr->ref >= 0) {
+			int16_t offs = *curr->def - curr->ref;
 			curr->I->imm.imm = offs;
-		} else if (curr->instc == -1) {
+		} else if (curr->ref == -1) {
 			if ((curr->I->jmp.op >> 1) == 0x01) {
-				curr->I->jmp.target = *curr->addr;
+				curr->I->jmp.target = *curr->def;
 			} else if (curr->I->imm.op == 0x0f) {
-				int16_t addr = (*curr->addr >> 14);
-				curr->I->imm.imm = addr;
+				int16_t def = (*curr->def >> 14);
+				curr->I->imm.imm = def;
 			} else {
-				int16_t addr = *curr->addr;
-				curr->I->imm.imm = (addr << 2);
+				int16_t def = *curr->def;
+				curr->I->imm.imm = (def << 2);
 			}
 		}
-		curr = curr->next;
 	}
 	while (curr->prev) {
 		curr = curr->prev;

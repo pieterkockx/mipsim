@@ -1,3 +1,4 @@
+/* Written by Pieter Kockx */
 #include "mem.h"
 #include "cpu.h"
 #include "host.h"

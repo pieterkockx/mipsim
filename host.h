@@ -1,3 +1,4 @@
+/* Written by Pieter Kockx */
 #include <stdarg.h>
 
 extern void exit(int);

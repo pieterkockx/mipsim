@@ -1,3 +1,4 @@
+/* Written by Pieter Kockx */
 #include <glob.h>
 #include <stdint.h>
 

@@ -1,24 +1,30 @@
+/* Written by Pieter Kockx */
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "mem.h"
 #include "parser.h"
 #include "host.h"
 
 extern union memory M;
 struct data_image Data = {0};
-
 int InstC = 0;
+
+static void Assert(void);
 
 int main(int argc, char *argv[])
 {
 	union inst *I[TEXT/WORD];
 	bool labels[2] = {0};
-	bool line_skipped;
+	bool line_skipped = false;
 	int opt_entry;
 	char opt_flags = 0;
 	size_t loc;
+
+	Assert();
 	for (loc=0; loc < TEXT/WORD ;++loc) {
 		I[loc] = malloc(sizeof(WORD));
 		if (I[loc])
@@ -82,6 +88,7 @@ int main(int argc, char *argv[])
 		if (!strcmp(argv[argc], "report"))
 			opt_flags += 2;
 	}
+	printf("\n");
 	boot(I, InstC, opt_entry, &Data, opt_flags);
 	return 0;
 }
@@ -89,6 +96,7 @@ int main(int argc, char *argv[])
 size_t getaline(char *buff, int max)
 {
 	size_t len;
+	printf("\n(%03d) << ", InstC);
 	if (fgets(buff, max, stdin) == NULL) {
 		return 0;
 	} else if ((len = strlen(buff))) {
@@ -96,5 +104,13 @@ size_t getaline(char *buff, int max)
 		return len;
 	}
 	return 0;
+}
+
+static void Assert(void)
+{
+	assert(sizeof(uint32_t) == sizeof(union inst));
+	assert(sizeof(uint32_t) == sizeof(struct _immediate));
+	assert(sizeof(uint32_t) == sizeof(struct _register));
+	assert(sizeof(uint32_t) == sizeof(struct _jump));
 }
 
