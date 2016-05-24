@@ -1,4 +1,3 @@
-/* Testing git */
 /* Written by Pieter Kockx */
 #include <stdlib.h>
 #include "mem.h"
